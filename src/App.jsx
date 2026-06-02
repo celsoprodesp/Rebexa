@@ -20,6 +20,7 @@ import { GoogleGenAI } from '@google/genai'
 function App() {
   // --- States ---
   const [apiKey, setApiKey] = useState('')
+  const [groqApiKey, setGroqApiKey] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [isCompatible, setIsCompatible] = useState(true)
   const [isActive, setIsActive] = useState(false) // Whether assistant is enabled/turned on
@@ -38,14 +39,22 @@ function App() {
   const utteranceRef = useRef(null)
   const chatEndRef = useRef(null)
   const isWaitingForFirstCommandRef = useRef(false)
+  const silenceTimerRef = useRef(null)
+  const isSilenceTimerReachedRef = useRef(false)
+  const commandBaseRef = useRef('')
+  const commandStartTimeRef = useRef(0)
 
   // Load API Key and verify compatibility on mount
   useEffect(() => {
     const savedKey = localStorage.getItem('gemini_api_key')
+    const savedGroqKey = localStorage.getItem('groq_api_key')
     if (savedKey) {
       setApiKey(savedKey)
     } else {
       setShowSettings(true) // Open settings if no key is found
+    }
+    if (savedGroqKey) {
+      setGroqApiKey(savedGroqKey)
     }
 
     // Check Web Speech API compatibility
@@ -185,6 +194,9 @@ function App() {
           speechModeRef.current = 'command'
           isWaitingForFirstCommandRef.current = true
           commandTextRef.current = ''
+          commandBaseRef.current = ''
+          isSilenceTimerReachedRef.current = false
+          commandStartTimeRef.current = Date.now()
           setCurrentText('')
           setStatus('listening_command')
 
@@ -193,16 +205,38 @@ function App() {
           rec.stop()
         }
       } else if (speechModeRef.current === 'command') {
-        // Capture spoken command
-        setCurrentText(transcript)
-        if (isFinal) {
-          commandTextRef.current = transcript
-          // For continuous: false, it would stop here. 
-          // With continuous: true, we might want to stop manually or wait for silence.
-          // The original code seems to rely on manually stopping or onend.
-          // Let's stop it to process the command once we have a final result.
-          rec.stop()
+        // Avoid processing residual results from the trigger session
+        if (isWaitingForFirstCommandRef.current) return
+
+        // Accumulate transcriptions instead of stopping on the first final result
+        let finalTranscripts = ''
+        let interimTranscripts = ''
+        for (let i = 0; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            finalTranscripts += event.results[i][0].transcript + ' '
+          } else {
+            interimTranscripts += event.results[i][0].transcript + ' '
+          }
         }
+
+        const base = commandBaseRef.current
+        const combinedText = base + finalTranscripts + interimTranscripts
+        setCurrentText(combinedText.trim())
+
+        const newTotalFinal = base + finalTranscripts
+        commandTextRef.current = newTotalFinal.trim() || combinedText.trim()
+
+        // Debounce: Wait 3 seconds of silence before finalizing
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+        silenceTimerRef.current = setTimeout(() => {
+          if (speechModeRef.current === 'command' && commandTextRef.current.trim()) {
+            console.log('Silence detected over 3s, stopping to process...')
+            isSilenceTimerReachedRef.current = true
+            if (recognitionRef.current) {
+              try { recognitionRef.current.stop() } catch (e) { }
+            }
+          }
+        }, 3000)
       }
     }
 
@@ -224,33 +258,55 @@ function App() {
 
       // Check current mode to determine next action
       if (speechModeRef.current === 'command') {
-        // If we have a captured command, send to Gemini
-        if (commandTextRef.current.trim()) {
+        if (isWaitingForFirstCommandRef.current) {
+          // We just transitioned to command mode, we need to START the actual session for the command
+          console.log('Command session starting...')
+          isWaitingForFirstCommandRef.current = false
+          isSilenceTimerReachedRef.current = false
+          setTimeout(() => {
+            if (isActiveRef.current) {
+              try { rec.start() } catch (e) { }
+            }
+          }, 100)
+        } else if (!isSilenceTimerReachedRef.current && commandTextRef.current.trim() !== '') {
+          // Ended early due to aggressive browser timeout but user didn't pause for 3s. Restart engine!
+          console.log('Engine timeout before 3s... Restarting background engine!')
+          const currentCommand = commandTextRef.current
+          commandBaseRef.current = currentCommand + (currentCommand.endsWith(' ') ? '' : ' ')
+          setTimeout(() => {
+            if (isActiveRef.current) {
+              try { rec.start() } catch (e) { }
+            }
+          }, 100)
+        } else if (commandTextRef.current.trim()) {
+          // If we have a captured command and 3 seconds passed, send to Gemini
+          if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
           const userMessage = commandTextRef.current
           // Add user message immediately to the UI chat
           setChatHistory(prev => [...prev, { role: 'user', text: userMessage }])
           setStatus('processing')
           processCommand(userMessage)
-        } else if (isWaitingForFirstCommandRef.current) {
-          // We just transitioned to command mode, we need to START the actual session for the command
-          console.log('Command session starting...')
-          isWaitingForFirstCommandRef.current = false
-          setTimeout(() => {
-            if (isActiveRef.current) {
-              try { rec.start() } catch (e) { }
-            }
-          }, 100)
         } else {
-          // No command detected (user was silent), return to trigger listening
-          console.log('No command detected. Returning to trigger mode...')
-          speechModeRef.current = 'trigger'
-          setStatus('listening_trigger')
+          // No command detected yet.
+          // Check if we are still within the 2-second grace period to start speaking
+          if (Date.now() - commandStartTimeRef.current < 2000) {
+            console.log('Engine timeout on empty session, but still within 10s grace period. Restarting command session...')
+            setTimeout(() => {
+              if (isActiveRef.current) {
+                try { rec.start() } catch (e) { }
+              }
+            }, 100)
+          } else {
+            console.log('No command detected and grace period expired. Returning to trigger mode...')
+            speechModeRef.current = 'trigger'
+            setStatus('listening_trigger')
 
-          setTimeout(() => {
-            if (isActiveRef.current) {
-              try { rec.start() } catch (e) { }
-            }
-          }, 100)
+            setTimeout(() => {
+              if (isActiveRef.current) {
+                try { rec.start() } catch (e) { }
+              }
+            }, 100)
+          }
         }
       } else {
         // If in trigger mode and it ended naturally, restart it to maintain continuous listening
@@ -279,6 +335,8 @@ function App() {
     playSound('off')
     setCurrentText('')
 
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
+
     // Cancel speaking
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
@@ -294,14 +352,17 @@ function App() {
 
   // --- Process User Command via Gemini API ---
   const processCommand = async (command) => {
-    if (!apiKey) {
+    const activeGeminiKey = localStorage.getItem('gemini_api_key') || apiKey;
+    const activeGroqKey = localStorage.getItem('groq_api_key') || groqApiKey;
+
+    if (!activeGeminiKey) {
       setApiError('Gemini API Key não configurada.')
       stopAssistant()
       return
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKey })
+      const ai = new GoogleGenAI({ apiKey: activeGeminiKey })
 
       const groundingTool = {
         googleSearch: {},
@@ -336,15 +397,43 @@ function App() {
 
     } catch (err) {
       console.error('Gemini API Error:', err)
-      const errMsg = err.message || 'Erro ao comunicar com a Gemini API.'
-      setApiError(`Erro: ${errMsg}`)
 
-      setChatHistory(prev => [...prev, {
-        role: 'model',
-        text: 'Desculpe, ocorreu um erro ao processar sua solicitação no momento.'
-      }])
+      // Fallback silencioso para o Groq
+      if (activeGroqKey) {
+        try {
+          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${activeGroqKey}`
+            },
+            body: JSON.stringify({
+              model: 'llama-3.1-8b-instant',
+              messages: [
+                { role: 'system', content: 'Você é um assistente de voz amigável e prestativo. Suas respostas serão lidas em voz alta.' },
+                { role: 'user', content: command }
+              ]
+            })
+          })
 
-      speakResponse('Desculpe, ocorreu um erro ao processar sua solicitação no momento.')
+          if (!groqResponse.ok) {
+            const errData = await groqResponse.text()
+            throw new Error(`Status ${groqResponse.status}: ${errData}`)
+          }
+
+          const groqData = await groqResponse.json()
+          const replyText = groqData.choices[0].message.content
+
+          setChatHistory(prev => [...prev, { role: 'model', text: replyText }])
+          speakResponse(replyText)
+          return
+        } catch (groqErr) {
+          console.error('Groq API Error:', groqErr)
+        }
+      }
+
+      // Se ambos falharam, apenas fala o erro sem poluir o chat
+      speakResponse('Desculpe, ocorreu um erro ao processar sua solicitação.')
     }
   }
 
@@ -420,6 +509,12 @@ function App() {
       localStorage.removeItem('gemini_api_key')
       setApiError('API Key removida. O assistente não funcionará.')
     }
+
+    if (groqApiKey.trim()) {
+      localStorage.setItem('groq_api_key', groqApiKey.trim())
+    } else {
+      localStorage.removeItem('groq_api_key')
+    }
   }
 
   // --- Clean Chat History ---
@@ -430,6 +525,7 @@ function App() {
   // --- Inline Send Command for Keyboard Fallback ---
   const handleManualSubmit = (e) => {
     e.preventDefault()
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
     const inputField = e.target.elements.manualCommand
     const message = inputField.value.trim()
     if (!message || status === 'processing' || status === 'speaking') return
@@ -548,28 +644,37 @@ function App() {
               Configuração da API Key
             </h2>
             <p className="text-xs text-zinc-400 mb-3">
-              Insira a sua chave de API do Gemini para alimentar a IA do assistente. Ela é guardada localmente no seu dispositivo.
+              Insira a sua chave de API do Gemini (Principal) e se quiser, a chave do Groq como plano de contingência caso o Gemini caia.
             </p>
-            <form onSubmit={saveApiKey} className="flex gap-2">
-              <div className="relative flex-1">
+            <form onSubmit={saveApiKey} className="flex flex-col gap-3">
+              <div className="flex gap-2 w-full">
                 <input
                   type="password"
-                  placeholder="Cole sua Gemini API Key aqui..."
+                  placeholder="Gemini API Key (Principal)..."
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  className="bg-zinc-900/90 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-transparent w-full"
+                  className="bg-zinc-900/90 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 focus:border-transparent flex-1"
                 />
               </div>
-              <button
-                type="submit"
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all duration-200 shadow-md shadow-purple-950/20 active:scale-95 cursor-pointer"
-              >
-                Salvar
-              </button>
+              <div className="flex gap-2 w-full">
+                <input
+                  type="password"
+                  placeholder="Groq API Key (Fallback Opcional)..."
+                  value={groqApiKey}
+                  onChange={(e) => setGroqApiKey(e.target.value)}
+                  className="bg-zinc-900/90 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-transparent flex-1"
+                />
+                <button
+                  type="submit"
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all duration-200 shadow-md shadow-purple-950/20 active:scale-95 cursor-pointer shrink-0"
+                >
+                  Salvar
+                </button>
+              </div>
             </form>
-            {apiKey && (
+            {(apiKey || groqApiKey) && (
               <p className="text-[10px] text-green-400/90 mt-2 flex items-center">
-                ● Chave de API Configurada
+                ● Chaves Configuradas
               </p>
             )}
           </div>

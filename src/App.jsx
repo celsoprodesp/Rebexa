@@ -182,10 +182,10 @@ function App() {
       console.log(`Speech heard (${speechModeRef.current}):`, transcript, isFinal ? '(final)' : '(interim)')
 
       if (speechModeRef.current === 'trigger') {
-        // Look for activation words (rebeca, etc.)
-        const cleanTranscript = transcript.toLowerCase()
+        // Look for activation words (rebexa, etc.)
+        const cleanTranscript = transcript.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         if (
-          cleanTranscript.includes('rebeca')
+          cleanTranscript.includes('Alexa')
         ) {
           console.log('Trigger keyword detected!')
           playSound('trigger')
@@ -547,8 +547,8 @@ function App() {
     switch (status) {
       case 'listening_trigger':
         return {
-          title: 'Rebeca',
-          sub: 'Diga "Rebeca" ou comece a falar',
+          title: 'Rebexa',
+          sub: 'Diga "Rebexa" ou comece a falar',
           colorClass: 'text-blue-400',
           btnRing: 'animate-ripple-blue bg-blue-600 shadow-blue-500/50',
           desc: 'Monitorando em segundo plano...'
@@ -614,7 +614,7 @@ function App() {
               <Sparkles className="w-4 h-4 text-white animate-pulse" />
             </div>
             <h1 className="font-display font-extrabold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-pink-400 to-pink-500">
-              Rebeca
+              Rebexa
             </h1>
             <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-full px-2 py-0.5 font-medium">
               PWA v1.0
@@ -746,7 +746,7 @@ function App() {
           {!isActive && isCompatible && (
             <div className="mt-6 flex items-center space-x-1.5 text-xs text-zinc-500 bg-zinc-900/40 px-3 py-1.5 rounded-full border border-zinc-900">
               <HelpCircle className="w-3.5 h-3.5" />
-              <span>Diga "Rebeca" para falar após ativar.</span>
+              <span>Diga "Rebexa" para falar após ativar.</span>
             </div>
           )}
         </section>

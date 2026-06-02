@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --font-display: 'Outfit', system-ui, sans-serif;
+  
+  --animate-ripple-blue: ripple-blue 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-ripple-green: ripple-green 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-ripple-pink: ripple-pink 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-ripple-yellow: ripple-yellow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes ripple-blue {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4), 0 0 0 8px rgba(59, 130, 246, 0.25), 0 0 0 16px rgba(59, 130, 246, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0), 0 0 0 24px rgba(59, 130, 246, 0), 0 0 0 36px rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes ripple-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4), 0 0 0 8px rgba(34, 197, 94, 0.25), 0 0 0 16px rgba(34, 197, 94, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(34, 197, 94, 0), 0 0 0 24px rgba(34, 197, 94, 0), 0 0 0 36px rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes ripple-pink {
+  0% {
+    box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4), 0 0 0 8px rgba(236, 72, 153, 0.25), 0 0 0 16px rgba(236, 72, 153, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(236, 72, 153, 0), 0 0 0 24px rgba(236, 72, 153, 0), 0 0 0 36px rgba(236, 72, 153, 0);
+  }
+}
+
+@keyframes ripple-yellow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.4), 0 0 0 8px rgba(234, 179, 8, 0.25), 0 0 0 16px rgba(234, 179, 8, 0.15);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(234, 179, 8, 0), 0 0 0 24px rgba(234, 179, 8, 0), 0 0 0 36px rgba(234, 179, 8, 0);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(0.98);
+  }
+}
+
+/* Glassmorphism custom styling utilities */
+.glass {
+  background: rgba(9, 9, 11, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(18, 18, 22, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Customize scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body {
+  background-color: #09090b;
+  overflow-x: hidden;
+}
+
+/* Custom soundwave animations */
+.soundwave-bar {
+  display: inline-block;
+  width: 3px;
+  height: 20px;
+  border-radius: 3px;
+  background-color: #a855f7;
+  animation: soundwave 1s ease-in-out infinite alternate;
+}
+
+.soundwave-bar:nth-child(2) {
+  animation-delay: 0.15s;
+  height: 35px;
+}
+
+.soundwave-bar:nth-child(3) {
+  animation-delay: 0.3s;
+  height: 15px;
+}
+
+.soundwave-bar:nth-child(4) {
+  animation-delay: 0.45s;
+  height: 40px;
+}
+
+.soundwave-bar:nth-child(5) {
+  animation-delay: 0.6s;
+  height: 25px;
+}
+
+@keyframes soundwave {
+  0% {
+    transform: scaleY(0.3);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}

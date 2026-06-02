@@ -185,7 +185,7 @@ function App() {
         // Look for activation words (rebexa, etc.)
         const cleanTranscript = transcript.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         if (
-          cleanTranscript.includes('Alexa')
+          cleanTranscript.includes('rebeca')
         ) {
           console.log('Trigger keyword detected!')
           playSound('trigger')
